@@ -3,12 +3,15 @@
 module CouchDB.Requests where
 
 
+import Blaze.ByteString.Builder (toByteString)
 import Control.Monad (void)
 import Control.Monad.Catch (MonadThrow(throwM))
 import Control.Monad.IO.Class (MonadIO)
 import Data.Aeson (FromJSON, ToJSON)
+import Data.ByteString.Char8 (unpack)
 import Data.Monoid ((<>))
-import Data.Text (Text, unpack)
+import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8)
 import Network.HTTP.Client (responseCookieJar)
 import Network.HTTP.Simple (parseRequest
                            , httpJSONEither
@@ -20,11 +23,12 @@ import Network.HTTP.Simple (parseRequest
                            , setRequestBodyJSON
                            , httpLBS)
 import Network.HTTP.Types.Status (ok200, notFound404)
+import Network.HTTP.Types.URI (encodePathSegments)
 
 
 getObjectUrl :: Text -> Text -> Text -> String
 getObjectUrl couchdbServer databaseId objectId =
-  unpack $ couchdbServer <> "/" <> databaseId <> "/" <> objectId
+  unpack $ encodeUtf8 couchdbServer <> toByteString (encodePathSegments [databaseId, objectId])
 
 
 getObject :: (MonadThrow m, MonadIO m, FromJSON a) => Text -> Text -> Text -> m (Maybe a)
