@@ -7,6 +7,8 @@ import Blaze.ByteString.Builder (toByteString)
 import Control.Monad (void)
 import Control.Monad.Catch (MonadThrow(throwM))
 import Control.Monad.IO.Class (MonadIO)
+import CouchDB.Auth (setAuth)
+import CouchDB.Types.Auth (Auth)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.ByteString.Char8 (unpack)
 import Data.Monoid ((<>))
@@ -21,19 +23,15 @@ import Network.HTTP.Simple (parseRequest
                            , HttpException(StatusCodeException)
                            , setRequestMethod
                            , setRequestBodyJSON
-                           , httpLBS)
+                           , httpLBS
+                           , Request)
 import Network.HTTP.Types.Status (ok200, notFound404)
 import Network.HTTP.Types.URI (encodePathSegments)
 
 
-getObjectUrl :: Text -> Text -> Text -> String
-getObjectUrl couchdbServer databaseId objectId =
-  unpack $ encodeUtf8 couchdbServer <> toByteString (encodePathSegments [databaseId, objectId])
-
-
-getObject :: (MonadThrow m, MonadIO m, FromJSON a) => Text -> Text -> Text -> m (Maybe a)
-getObject couchdbServer databaseName objectId = do
-  req <- parseRequest $ getObjectUrl couchdbServer databaseName objectId
+getObject :: (MonadThrow m, MonadIO m, FromJSON a) => Text -> Text -> Auth -> Text -> m (Maybe a)
+getObject couchdbServer databaseName auth objectId = do
+  req <- initRequest couchdbServer databaseName auth objectId
   resp <- httpJSONEither req
   let responseStatus = getResponseStatus resp
   if responseStatus == ok200
@@ -47,10 +45,21 @@ getObject couchdbServer databaseName objectId = do
     else throwM $ StatusCodeException responseStatus (getResponseHeaders resp) (responseCookieJar resp)
 
 
-putObject :: (MonadThrow m, MonadIO m, ToJSON a) => Text -> Text -> Text -> a -> m ()
-putObject couchdbServer databaseName objectId obj = do
-  initReq <- parseRequest $ getObjectUrl couchdbServer databaseName objectId
+putObject :: (MonadThrow m, MonadIO m, ToJSON a) => Text -> Text -> Auth -> Text -> a -> m ()
+putObject couchdbServer databaseName auth objectId obj = do
+  initReq <- initRequest couchdbServer databaseName auth objectId
   let
     req =
       setRequestMethod "PUT" $ setRequestBodyJSON obj initReq
   void $ httpLBS req
+
+
+initRequest :: (MonadThrow m) => Text -> Text -> Auth -> Text -> m Request
+initRequest couchdbServer databaseName auth objectId = do
+  req <- parseRequest $ getObjectUrl couchdbServer databaseName objectId
+  return $ setAuth auth req
+
+
+getObjectUrl :: Text -> Text -> Text -> String
+getObjectUrl couchdbServer databaseId objectId =
+  unpack $ encodeUtf8 couchdbServer <> toByteString (encodePathSegments [databaseId, objectId])

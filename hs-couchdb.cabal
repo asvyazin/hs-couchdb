@@ -15,9 +15,13 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     CouchDB.Changes.Watcher,
+  exposed-modules:     CouchDB.Auth,
+                       CouchDB.Changes.Watcher,
                        CouchDB.Requests,
-                       CouchDB.Types.Seq
+                       CouchDB.Views,
+                       CouchDB.Types.Auth,
+                       CouchDB.Types.Seq,
+                       CouchDB.Types.Views
   build-depends:       aeson,
                        attoparsec,
                        base,
