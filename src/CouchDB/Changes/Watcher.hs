@@ -4,13 +4,15 @@
 module CouchDB.Changes.Watcher where
 
 
-import CouchDB.Types.Seq (Seq(IntSeq, TextSeq, EmptySeq))
+import Blaze.ByteString.Builder (toByteString)
 import Control.Applicative ((<|>))
 import Control.Lens (makeLenses)
 import Control.Monad.Catch (MonadMask)
 import Control.Monad.IO.Class (MonadIO)
-import Blaze.ByteString.Builder (toByteString)
-import Data.Aeson (FromJSON(parseJSON), Value(Object), (.:), (.:?), json')
+import CouchDB.Auth (setAuth)
+import CouchDB.Types.Auth (Auth)
+import CouchDB.Types.Seq (Seq(IntSeq, TextSeq, EmptySeq))
+import Data.Aeson (FromJSON(parseJSON), (.:), (.:?), json', withObject)
 import Data.Aeson.Types (parseEither)
 import Data.ByteString.Char8 (pack, unpack)
 import Data.Conduit ((=$=), Sink, ConduitM, fuseBoth, await, yield)
@@ -24,18 +26,18 @@ import Network.HTTP.Types.URI (renderQuery, encodePathSegments)
 import Network.HTTP.Simple (parseRequest, httpSink)
 
 
-watchChanges :: (MonadIO m, MonadMask m) => WatchParams -> Sink DocumentChange m a -> m a
-watchChanges params consumer = do
-  (maybeLs, result) <- watchChanges' params consumer
+watchChanges :: (MonadIO m, MonadMask m) => Auth -> WatchParams -> Sink DocumentChange m a -> m a
+watchChanges auth params consumer = do
+  (maybeLs, result) <- watchChanges' auth params consumer
   case maybeLs of
     Nothing ->
       return result
     Just ls ->
-      watchChanges params { _since = Just ls } consumer
+      watchChanges auth params { _since = Just ls } consumer
 
 
-watchChanges' :: (MonadIO m, MonadMask m) => WatchParams -> Sink DocumentChange m a -> m (Maybe Seq, a)
-watchChanges' params consumer = do
+watchChanges' :: (MonadIO m, MonadMask m) => Auth -> WatchParams -> Sink DocumentChange m a -> m (Maybe Seq, a)
+watchChanges' auth params consumer = do
   let
     sinceParam s =
       ("since", Just $ seqToString s)
@@ -76,7 +78,7 @@ watchChanges' params consumer = do
               yield i
               findLastSeq
 
-  req <- parseRequest $ unpack url
+  req <- setAuth auth <$> parseRequest (unpack url)
   httpSink req $ const $ conduitParser json' =$= DC.map (parseEither parseJSON . snd) =$= findLastSeq `fuseBoth` consumer
 
 
@@ -111,17 +113,13 @@ data Change =
 
 
 instance FromJSON DocumentChange where
-  parseJSON (Object v) =
+  parseJSON = withObject "Invalid DocumentChange JSON" $ \v ->
     DocumentChange <$> v .: "seq" <*> v .: "id" <*> v .: "changes" <*> (fromMaybe False <$> v .:? "deleted")
-  parseJSON _ =
-    error "Invalid DocumentChange JSON"
 
 
 instance FromJSON Change where
-  parseJSON (Object v) =
+  parseJSON = withObject "Invalid Change JSON" $ \v ->
     Change <$> v .: "rev"
-  parseJSON _ =
-    error "Invalid Change JSON"
 
 
 instance FromJSON WatchItem where
@@ -136,10 +134,8 @@ data LastSeq =
 
 
 instance FromJSON LastSeq where
-  parseJSON (Object o) =
-    LastSeq <$> o .: "last_seq"
-  parseJSON _ =
-    error "Invalid LastSeq JSON"
+  parseJSON = withObject "Invalid LastSeq JSON" $ \v ->
+    LastSeq <$> v .: "last_seq"
 
 
 makeLenses ''DocumentChange
