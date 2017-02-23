@@ -10,21 +10,21 @@ import Control.Monad.IO.Class (MonadIO)
 import CouchDB.Auth (setAuth)
 import CouchDB.Types.Auth (Auth)
 import Data.Aeson (FromJSON, ToJSON)
+import Data.ByteString (empty)
 import Data.ByteString.Char8 (unpack)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import Network.HTTP.Client (responseCookieJar)
+import Network.HTTP.Conduit (HttpExceptionContent(StatusCodeException))
 import Network.HTTP.Simple (parseRequest
-                           , httpJSONEither
-                           , getResponseStatus
-                           , getResponseBody
-                           , getResponseHeaders
-                           , HttpException(StatusCodeException)
-                           , setRequestMethod
-                           , setRequestBodyJSON
-                           , httpLBS
-                           , Request)
+                                  , httpJSONEither
+                                  , getResponseStatus
+                                  , getResponseBody
+                                  , HttpException(HttpExceptionRequest)
+                                  , setRequestMethod
+                                  , setRequestBodyJSON
+                                  , httpLBS
+                                  , Request)
 import Network.HTTP.Types.Status (ok200, notFound404)
 import Network.HTTP.Types.URI (encodePathSegments)
 
@@ -42,7 +42,7 @@ getObject couchdbServer databaseName auth objectId = do
     else
     if responseStatus == notFound404
     then return Nothing
-    else throwM $ StatusCodeException responseStatus (getResponseHeaders resp) (responseCookieJar resp)
+    else throwM $ HttpExceptionRequest req $ StatusCodeException (void resp) empty
 
 
 putObject :: (MonadThrow m, MonadIO m, ToJSON a) => Text -> Text -> Auth -> Text -> a -> m ()

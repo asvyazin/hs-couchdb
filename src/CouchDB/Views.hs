@@ -4,19 +4,20 @@ module CouchDB.Views where
 
 import Blaze.ByteString.Builder (toByteString)
 import Control.Lens ((^.))
+import Control.Monad (void)
 import Control.Monad.Catch (MonadThrow(throwM))
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import CouchDB.Auth (setAuth)
 import CouchDB.Types.Auth (Auth)
 import CouchDB.Types.Views (ViewQueryParameters, ViewResult, key, limit)
 import Data.Aeson (FromJSON, ToJSON, encode)
-import Data.ByteString.Char8 (unpack, pack)
+import Data.ByteString.Char8 (unpack, pack, empty)
 import Data.ByteString.Lazy (toStrict)
 import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8)
-import Network.HTTP.Client (responseCookieJar)
-import Network.HTTP.Simple (Request, parseRequest, httpJSONEither, getResponseStatus, getResponseBody, getResponseHeaders, HttpException(StatusCodeException))
+import Network.HTTP.Conduit (HttpExceptionContent(StatusCodeException))
+import Network.HTTP.Simple (Request, parseRequest, httpJSONEither, getResponseStatus, getResponseBody, HttpException(HttpExceptionRequest))
 import Network.HTTP.Types.QueryLike (toQuery)
 import Network.HTTP.Types.Status (ok200)
 import Network.HTTP.Types.URI (encodePath)
@@ -32,7 +33,7 @@ getView couchdbServer databaseName auth designDoc view queryParameters = do
     case getResponseBody resp of
       Left e -> throwM e
       Right res -> return res
-    else throwM $ StatusCodeException responseStatus (getResponseHeaders resp) (responseCookieJar resp)
+    else throwM $ HttpExceptionRequest req $ StatusCodeException (void resp) empty
 
 
 initRequest :: (MonadThrow m, MonadIO m, ToJSON k) => Text -> Text -> Auth -> Text -> Text -> ViewQueryParameters k -> m Request
